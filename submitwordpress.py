@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SubmitWordPress",
     "author": "MITSUDA Tetsuo",
-    "version": (0, 0, 3),
+    "version": (0, 0, 4),
     "blender": (2, 6, 7),
     "location": "View3D > Tool Shelf > SubmitWordPress",
     "description": "submit your object on WordPress blog (using by XML-RPC)",
@@ -113,6 +113,23 @@ def readconfig():
 
     return((user,passwd,urlstr))
 
+class DialogOperator(bpy.types.Operator):
+    bl_idname = "object.dialog_operator"
+    bl_label = "Information"
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+    def invoke(self, context, event):
+        wm = context.window_manager
+        return wm.invoke_props_dialog(self)
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column()
+        col.label(text=bpy.context.scene.wpdialog_message)
+
+
 # submit it!
 class SubmitWordPressOperator(bpy.types.Operator):
 
@@ -128,14 +145,16 @@ class SubmitWordPressOperator(bpy.types.Operator):
     
     def execute(self, context):
 
-        user = bpy.context.scene.wppanel_user
-        passwd = bpy.context.scene.wppanel_passwd
-        passwdhidden = bpy.context.scene.wppanel_passwdhidden
-        urlstr = bpy.context.scene.wppanel_urlstr
-        pubflg = bpy.context.scene.wppanel_pubflg
-        title = bpy.context.scene.wppanel_title
-        text = bpy.context.scene.wppanel_text
-        imgsel = bpy.context.scene.wppanel_imgsel
+        scene = bpy.context.scene
+        
+        user = scene.wppanel_user
+        passwd = scene.wppanel_passwd
+        passwdhidden = scene.wppanel_passwdhidden
+        urlstr = scene.wppanel_urlstr
+        pubflg = scene.wppanel_pubflg
+        title = scene.wppanel_title
+        text = scene.wppanel_text
+        imgsel = scene.wppanel_imgsel
         imgstr = ""
         mimetype = "image/jpeg"
 
@@ -182,11 +201,11 @@ class SubmitWordPressOperator(bpy.types.Operator):
 
 
             # title : UPPERCASE alphabet (roma-ji) will convert Japanese kana
-            if bpy.context.scene.wppanel_titleflg :
+            if scene.wppanel_titleflg :
                 title = self.getkana(title)
 
             # text : UPPERCASE alphabet (roma-ji) will convert Japanese kana
-            if bpy.context.scene.wppanel_textflg :
+            if scene.wppanel_textflg :
                 text = self.getkana(text)
 
             content = "<p>"+ text + "</p>\n"+ imgstr + \
@@ -200,7 +219,9 @@ class SubmitWordPressOperator(bpy.types.Operator):
             if pubflg :
                 server.mt.publishPost(post_id, user, passwdhidden)
             
-            print("[SubmitWordPress]:submitted.")
+            scene.wpdialog_message = "finished."
+            bpy.ops.object.dialog_operator('INVOKE_DEFAULT')
+
 
         return {'FINISHED'}
 
@@ -212,25 +233,32 @@ class UpdateAccountOperator(bpy.types.Operator):
 
     def execute(self, context):
 
-        user = bpy.context.scene.wppanel_user
-        passwd = bpy.context.scene.wppanel_passwd
-        urlstr = bpy.context.scene.wppanel_urlstr
+        scene = bpy.context.scene
+        user = scene.wppanel_user
+        passwd = scene.wppanel_passwd
+        urlstr = scene.wppanel_urlstr
         
+        if passwd != "":
+            # store blog account info to file
+            # [caution:the text is row ]
+            token = user + "|" + passwd + "|" + urlstr
         
-        # store blog account info to file
-        # [caution:the text is row ]
-        token = user + "|" + passwd + "|" + urlstr
+            path = os.path.join(bpy.utils.user_resource('SCRIPTS'), "presets")
+            if not os.path.exists(path):
+                os.makedirs(path)
+            filepath = os.path.join(path, "wpaccount.txt")
+            file = open(filepath, 'w+')
+            file.write(token)
+            file.close()
         
-        path = os.path.join(bpy.utils.user_resource('SCRIPTS'), "presets")
-        if not os.path.exists(path):
-            os.makedirs(path)
-        filepath = os.path.join(path, "wpaccount.txt")
-        file = open(filepath, 'w+')
-        file.write(token)
-        file.close()
+            scene.wppanel_passwdhidden = passwd
+            scene.wppanel_passwd = ""
+            scene.wpdialog_message = "update is done."
         
-        bpy.context.scene.wppanel_passwdhidden = passwd
-        bpy.context.scene.wppanel_passwd = ""
+        else:
+            scene.wpdialog_message = "password is empty. update is canceled."
+
+        bpy.ops.object.dialog_operator('INVOKE_DEFAULT')
 
         return {'FINISHED'}
     
@@ -252,7 +280,10 @@ class RestoreAccountOperator(bpy.types.Operator):
         scene.wppanel_passwd = ""
         scene.wppanel_passwdhidden = passwd 
         scene.wppanel_urlstr = urlstr
-        
+
+        scene.wpdialog_message = "restore is done."
+        bpy.ops.object.dialog_operator('INVOKE_DEFAULT')
+
         return {'FINISHED'}
 
 # Panel 
@@ -309,6 +340,7 @@ def register():
     bpy.utils.register_class(UpdateAccountOperator)
     bpy.utils.register_class(RestoreAccountOperator)
     bpy.utils.register_class(VIEW3D_PT_SubmitWordPressPanel)
+    bpy.utils.register_class(DialogOperator)
     
     user = ""
     passwd = ""
@@ -332,12 +364,16 @@ def register():
     bpy.types.Scene.wppanel_titleflg = bpy.props.BoolProperty(name="title is roman-kana", default = kanaflg )
     bpy.types.Scene.wppanel_textflg = bpy.props.BoolProperty(name="text is roman-kana", default = kanaflg )
 
+    bpy.types.Scene.wpdialog_message = bpy.props.StringProperty(name="message", default = '<message>')
+
 
 def unregister():
     bpy.utils.unregister_class(VIEW3D_PT_SubmitWordPressPanel)
     bpy.utils.unregister_class(SubmitWordPressOperator)
     bpy.utils.unregister_class(UpdateAccountOperator)
     bpy.utils.unregister_class(RestoreAccountOperator)
+    bpy.utils.unregister_class(DialogOperator)
+
     del bpy.types.Scene.wppanel_user
     del bpy.types.Scene.wppanel_passwd
     del bpy.types.Scene.wppanel_passwdhidden
@@ -350,6 +386,8 @@ def unregister():
     del bpy.types.Scene.wppanel_kanaflg
     del bpy.types.Scene.wppanel_titleflg
     del bpy.types.Scene.wppanel_textflg
+
+    del bpy.types.Scene.wpdialog_message
 
 if __name__ == "__main__":
     register()
