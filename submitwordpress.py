@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SubmitWordPress",
     "author": "MITSUDA Tetsuo",
-    "version": (0, 0, 2),
+    "version": (0, 0, 3),
     "blender": (2, 6, 7),
     "location": "View3D > Tool Shelf > SubmitWordPress",
     "description": "submit your object on WordPress blog (using by XML-RPC)",
@@ -11,13 +11,31 @@ bl_info = {
     "category": "3D View"}
 
 
+# submitwordpress.py 0.03 by MITSUDA Tetsuo(Manda)
+#
+# submit your object on WordPress blog (using by XML-RPC)
+#
+# if you put romakanatbl.py on ${addonpath}/romakanatbl/ ,
+# you can use roma-ji extention.
+# (in title and text )some uppercase alphabet will be Japanese hiragana :)
+
 import bpy
 import os
 import xmlrpc.client
 import time
 
+kanaflg = False
+
+# import romankanatbl as extention
+try:
+    import romakanatbl.romakanatbl as rk
+    kanaflg = True
+    print("[SubmitWordPress] romankana extention is available.")
+except:
+    print("[SubmitWordPress] no romankana extention.")
+
 # save an openGL render
-def create_image():
+def create_image(imgsel):
     # saving old settings
     old_path = bpy.context.scene.render.filepath
     old_fileformat = bpy.context.scene.render.image_settings.file_format
@@ -43,9 +61,17 @@ def create_image():
     bpy.context.scene.render.resolution_percentage = 100
     bpy.context.scene.render.pixel_aspect_x = 1.0
     bpy.context.scene.render.pixel_aspect_y = 1.0
-    
+
     # render
-    bpy.ops.render.opengl(write_still=True, view_context=True)
+    if imgsel == "opengl":
+        filepath += ".jpg"
+        bpy.ops.render.opengl(write_still=True, view_context=True)
+    elif imgsel == "screenshot":
+        filepath += ".png"
+        bpy.ops.screen.screenshot(filepath=filepath, 
+                                  check_existing=False,
+                                  full=True)
+
     
     # restore old settings
     bpy.context.scene.render.filepath = old_path
@@ -58,12 +84,11 @@ def create_image():
     bpy.context.scene.render.pixel_aspect_y = old_aspect_y
 
     # return values
-    filepath += ".jpg"
     size = os.path.getsize(filepath)
 
     return(filepath)
 
-
+# read config from the file
 def readconfig():
 
     user = ""
@@ -83,53 +108,86 @@ def readconfig():
         user = elem[0]
         passwd = elem[1]
         urlstr = elem[2]
+    else:
+        print("[SubmitWordPress] can't read configuration. please update your info.")
 
     return((user,passwd,urlstr))
 
-
+# submit it!
 class SubmitWordPressOperator(bpy.types.Operator):
 
     bl_idname = "wm.submitwordpressope"
     bl_label = "SubmitWordPress"
     
+    def getkana(self,line):
+        ht = rk.RomaKanaTable()
+        ht.init()
+        ht.makeTable(rk.ROMANHIRAGANATABLE,rk.ROMANHIRAGANATABLE_NASAL,
+                 rk.ROMANHIRAGANA_GEMINATECONSOANT,rk.HIRAGANA_GEMINATESTRING)
+        return(ht.getkana(line,False))
+    
     def execute(self, context):
 
         user = bpy.context.scene.wppanel_user
         passwd = bpy.context.scene.wppanel_passwd
+        passwdhidden = bpy.context.scene.wppanel_passwdhidden
         urlstr = bpy.context.scene.wppanel_urlstr
         pubflg = bpy.context.scene.wppanel_pubflg
         title = bpy.context.scene.wppanel_title
         text = bpy.context.scene.wppanel_text
-        imgflg = bpy.context.scene.wppanel_imgflg
+        imgsel = bpy.context.scene.wppanel_imgsel
         imgstr = ""
+        mimetype = "image/jpeg"
 
-        #test
-        test = False
         
+        if passwd != "":
+           passwdhidden = passwd
+
+        #for test
+        test = False
+
         if test:
             print("user:     " + user )
             print("title:    " + title )
+            print("pwdhidden:" + passwdhidden )
         else:
             
             server = xmlrpc.client.ServerProxy(urlstr)
 
             blog_id = "blog"
             
-            if imgflg:
+            # post OpenGL image ( not delete the image. )
+            if imgsel != 'noimage':
             
-                filepath = create_image()
+                filepath = create_image(imgsel)
 
                 file=open(filepath,"rb")
                 file_enc=xmlrpc.client.Binary(file.read())
                 file.close()
 
-                image_content={'name':filepath,'type':"image/jpeg",'bits':file_enc,'overwrite':True}
+                # set mimetype
+                ext = os.path.splitext(filepath)
+                if ext[1] == ".jpg":
+                    mimetype = "image/jpeg"
+                elif ext[1] == ".png":
+                    mimetype = "image/png"
+                
+                image_content={'name':filepath,'type':mimetype,'bits':file_enc,'overwrite':True}
 
-                result=server.wp.uploadFile(blog_id, user, passwd, image_content)
+                # upload
+                result=server.wp.uploadFile(blog_id, user, passwdhidden, image_content)
                 imgurl = result.get("url")
                 
                 imgstr = "<p><img src = \""+ imgurl + "\"></p>\n"
 
+
+            # title : UPPERCASE alphabet (roma-ji) will convert Japanese kana
+            if bpy.context.scene.wppanel_titleflg :
+                title = self.getkana(title)
+
+            # text : UPPERCASE alphabet (roma-ji) will convert Japanese kana
+            if bpy.context.scene.wppanel_textflg :
+                text = self.getkana(text)
 
             content = "<p>"+ text + "</p>\n"+ imgstr + \
             "<p>This post is submitted from SubmitWordPress Add-on on Blender" + \
@@ -137,15 +195,16 @@ class SubmitWordPressOperator(bpy.types.Operator):
 
             blog_content = { 'title' : title, 'description' : content }
 
-            post_id = int(server.metaWeblog.newPost(blog_id, user, passwd, blog_content,0))
+            post_id = int(server.metaWeblog.newPost(blog_id, user, passwdhidden, blog_content,0))
         
             if pubflg :
-                server.mt.publishPost(post_id, user, passwd)
+                server.mt.publishPost(post_id, user, passwdhidden)
             
             print("[SubmitWordPress]:submitted.")
 
         return {'FINISHED'}
 
+# update your account information
 class UpdateAccountOperator(bpy.types.Operator):
 
     bl_idname = "wm.updateaccountope"
@@ -170,8 +229,12 @@ class UpdateAccountOperator(bpy.types.Operator):
         file.write(token)
         file.close()
         
+        bpy.context.scene.wppanel_passwdhidden = passwd
+        bpy.context.scene.wppanel_passwd = ""
+
         return {'FINISHED'}
     
+# restore your account information from the file
 class RestoreAccountOperator(bpy.types.Operator):
 
     bl_idname = "wm.restoreaccountope"
@@ -186,11 +249,13 @@ class RestoreAccountOperator(bpy.types.Operator):
 
         scene = bpy.context.scene
         scene.wppanel_user = user
-        scene.wppanel_passwd = passwd 
+        scene.wppanel_passwd = ""
+        scene.wppanel_passwdhidden = passwd 
         scene.wppanel_urlstr = urlstr
         
         return {'FINISHED'}
 
+# Panel 
 class VIEW3D_PT_SubmitWordPressPanel(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
@@ -221,9 +286,20 @@ class VIEW3D_PT_SubmitWordPressPanel(bpy.types.Panel):
         row = layout.row()
         row.prop(scene, "wppanel_title")
         row = layout.row()
+        
+        if scene.wppanel_kanaflg :
+            row.prop(scene, "wppanel_titleflg")
+            row = layout.row()
+        
+        
         row.prop(scene, "wppanel_text")
         row = layout.row()
-        row.prop(scene, "wppanel_imgflg")
+        
+        if scene.wppanel_kanaflg :
+            row.prop(scene, "wppanel_textflg")
+            row = layout.row()
+        
+        row.prop(scene, "wppanel_imgsel")
         row = layout.row()
         row.operator("wm.submitwordpressope")
 
@@ -241,12 +317,20 @@ def register():
     (user,passwd,urlstr)=readconfig()
 
     bpy.types.Scene.wppanel_user = bpy.props.StringProperty(name="user", default = user )
-    bpy.types.Scene.wppanel_passwd = bpy.props.StringProperty(name="password", default = passwd)
+    bpy.types.Scene.wppanel_passwd = bpy.props.StringProperty(name="password", default = '')
+    bpy.types.Scene.wppanel_passwdhidden = bpy.props.StringProperty(name="password", default = passwd)
     bpy.types.Scene.wppanel_urlstr = bpy.props.StringProperty(name="url", default = urlstr)
     bpy.types.Scene.wppanel_pubflg = bpy.props.BoolProperty(name="publish", default = False )
     bpy.types.Scene.wppanel_title = bpy.props.StringProperty(name="title", default = '' )
     bpy.types.Scene.wppanel_text = bpy.props.StringProperty(name="text", default = '')
-    bpy.types.Scene.wppanel_imgflg = bpy.props.BoolProperty(name="OpenGL preview", default = True )
+    bpy.types.Scene.wppanel_imgsel = bpy.props.EnumProperty(name="images",
+                                     items = (('opengl', "OpenGL preview", "with OpenGL preview"),
+                                     ('screenshot', "Screenshot", "take Screenshot"),
+                                     ('noimage', "no image", "no image")),default = 'opengl')
+
+    bpy.types.Scene.wppanel_kanaflg = bpy.props.BoolProperty(name="usekana", default = kanaflg )
+    bpy.types.Scene.wppanel_titleflg = bpy.props.BoolProperty(name="title is roman-kana", default = kanaflg )
+    bpy.types.Scene.wppanel_textflg = bpy.props.BoolProperty(name="text is roman-kana", default = kanaflg )
 
 
 def unregister():
@@ -256,12 +340,25 @@ def unregister():
     bpy.utils.unregister_class(RestoreAccountOperator)
     del bpy.types.Scene.wppanel_user
     del bpy.types.Scene.wppanel_passwd
+    del bpy.types.Scene.wppanel_passwdhidden
     del bpy.types.Scene.wppanel_urlstr
     del bpy.types.Scene.wppanel_pubflg
     del bpy.types.Scene.wppanel_title
     del bpy.types.Scene.wppanel_text
-    del bpy.types.Scene.wppanel_imgflg
+    del bpy.types.Scene.wppanel_imgsel
 
+    del bpy.types.Scene.wppanel_kanaflg
+    del bpy.types.Scene.wppanel_titleflg
+    del bpy.types.Scene.wppanel_textflg
 
 if __name__ == "__main__":
     register()
+
+# Release log:
+#    0.0.1    : Submit text title
+#    0.0.2    : Submit text with OpenGL preview
+#    0.0.3    : Submit text with ...
+#                  OpenGL preview or Screen Shot
+#               Do not display password at 'wppanel_passwd'
+#               Roman-kana extention 
+#                  put romakanatbl.py on ${addonpath}/romakanatbl/
