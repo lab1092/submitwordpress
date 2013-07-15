@@ -34,33 +34,43 @@ try:
 except:
     print("[SubmitWordPress] no romankana extention.")
 
+def setattrs(obj, newattrs) :
+    # does bulk setting of attributes on obj according to names
+    # and new values in newattrs dict. Returns a dict containing
+    # the previous values; this may be passed back to setattrs to
+    # restore those values.
+    prevattrs = {}
+    for attr in newattrs :
+        prevattrs[attr] = getattr(obj, attr)
+        setattr(obj, attr, newattrs[attr])
+    #end for
+    return prevattrs
+#end setattrs
+
 # save an openGL render
 def create_image(imgsel):
-    # saving old settings
-    old_path = bpy.context.scene.render.filepath
-    old_fileformat = bpy.context.scene.render.image_settings.file_format
-    old_extension = bpy.context.scene.render.use_file_extension
-    old_x = bpy.context.scene.render.resolution_x
-    old_y = bpy.context.scene.render.resolution_y
-    old_percentage = bpy.context.scene.render.resolution_percentage
-    old_aspect_x = bpy.context.scene.render.pixel_aspect_x
-    old_aspect_y = bpy.context.scene.render.pixel_aspect_y
-    
-    # setting up render settings
     filepath = bpy.data.filepath
     filename_pos = len(bpy.path.basename(bpy.data.filepath))
     filepath = filepath[:-filename_pos]
     filename = time.strftime("Img%Y%m%d%H%M%S",
         time.localtime(time.time()))
     filepath += filename
-    bpy.context.scene.render.filepath = filepath
+    # save old settings and set new ones
+    old_render = setattrs \
+      (
+        bpy.context.scene.render,
+        {
+            "filepath" : filepath,
+            "use_file_extension" : True,
+            "resolution_x" : 320,
+            "resolution_y" : 240,
+            "resolution_percentage" : 100,
+            "pixel_aspect_x" : 1.0,
+            "pixel_aspect_y" : 1.0,
+        }
+      )
+    old_fileformat = bpy.context.scene.render.image_settings.file_format
     bpy.context.scene.render.image_settings.file_format = 'JPEG'
-    bpy.context.scene.render.use_file_extension = True
-    bpy.context.scene.render.resolution_x = 320
-    bpy.context.scene.render.resolution_y = 240
-    bpy.context.scene.render.resolution_percentage = 100
-    bpy.context.scene.render.pixel_aspect_x = 1.0
-    bpy.context.scene.render.pixel_aspect_y = 1.0
 
     # render
     if imgsel == "opengl":
@@ -74,19 +84,13 @@ def create_image(imgsel):
 
     
     # restore old settings
-    bpy.context.scene.render.filepath = old_path
+    setattrs(bpy.context.scene.render, old_render)
     bpy.context.scene.render.image_settings.file_format = old_fileformat
-    bpy.context.scene.render.use_file_extension = old_extension
-    bpy.context.scene.render.resolution_x = old_x
-    bpy.context.scene.render.resolution_y = old_y
-    bpy.context.scene.render.resolution_percentage = old_percentage
-    bpy.context.scene.render.pixel_aspect_x = old_aspect_x
-    bpy.context.scene.render.pixel_aspect_y = old_aspect_y
 
     # return values
     size = os.path.getsize(filepath)
 
-    return(filepath)
+    return filepath
 
 # read config from the file
 def readconfig():
