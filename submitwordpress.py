@@ -149,6 +149,8 @@ class SubmitWordPressOperator(bpy.types.Operator):
     
     def execute(self, context):
 
+        ts = time.time()
+        
         scene = bpy.context.scene
         
         user = scene.wppanel_user
@@ -176,6 +178,9 @@ class SubmitWordPressOperator(bpy.types.Operator):
         else:
             
             server = xmlrpc.client.ServerProxy(urlstr)
+            
+            # blog system supported function
+            # print( server.mt.supportedMethods() )
 
             blog_id = "blog"
             
@@ -220,10 +225,12 @@ class SubmitWordPressOperator(bpy.types.Operator):
 
             post_id = int(server.metaWeblog.newPost(blog_id, user, passwdhidden, blog_content,0))
         
+        
             if pubflg :
                 server.mt.publishPost(post_id, user, passwdhidden)
             
-            scene.wpdialog_message = "finished."
+            te = time.time()
+            scene.wpdialog_message = "finished in " + str(int(te - ts)) + " second(s)."
             bpy.ops.object.dialog_operator('INVOKE_DEFAULT')
 
 
@@ -404,3 +411,5 @@ if __name__ == "__main__":
 #               Do not display password at 'wppanel_passwd'
 #               Roman-kana extention 
 #                  put romakanatbl.py on ${addonpath}/romakanatbl/
+#    0.0.4    : (thakns ldo) make save/restore settings less repetitive
+#               popup dialog (when post is finished,etc...)
