@@ -1,7 +1,7 @@
 bl_info = {
     "name": "SubmitWordPress",
     "author": "MITSUDA Tetsuo",
-    "version": (0, 0, 4),
+    "version": (0, 0, 5),
     "blender": (2, 6, 7),
     "location": "View3D > Tool Shelf > SubmitWordPress",
     "description": "submit your object on WordPress blog (using by XML-RPC)",
@@ -11,7 +11,7 @@ bl_info = {
     "category": "3D View"}
 
 
-# submitwordpress.py 0.03 by MITSUDA Tetsuo(Manda)
+# submitwordpress.py 0.05 by MITSUDA Tetsuo(Manda)
 #
 # submit your object on WordPress blog (using by XML-RPC)
 #
@@ -299,6 +299,7 @@ class RestoreAccountOperator(bpy.types.Operator):
 
 # Panel 
 class VIEW3D_PT_SubmitWordPressPanel(bpy.types.Panel):
+    bl_category = "SubmitWordPress"
     bl_space_type = "VIEW_3D"
     bl_region_type = "TOOLS"
     bl_label = "Submit WordPress"
@@ -413,3 +414,4 @@ if __name__ == "__main__":
 #                  put romakanatbl.py on ${addonpath}/romakanatbl/
 #    0.0.4    : (thakns ldo) make save/restore settings less repetitive
 #               popup dialog (when post is finished,etc...)
+#    0.0.5    : "SubmitWordPress" Tab for 2.70
