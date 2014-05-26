@@ -2,7 +2,7 @@ bl_info = {
     "name": "SubmitWordPress",
     "author": "MITSUDA Tetsuo",
     "version": (0, 0, 5),
-    "blender": (2, 6, 7),
+    "blender": (2, 67, 0),
     "location": "View3D > Tool Shelf > SubmitWordPress",
     "description": "submit your object on WordPress blog (using by XML-RPC)",
     "warning": "",
